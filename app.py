@@ -1,4 +1,4 @@
-from flask import Flask, request, jsonify
+from flask import Flask, request, jsonify, render_template_string
 import firebase_admin
 from firebase_admin import credentials, firestore
 from sklearn.neighbors import NearestNeighbors
@@ -55,6 +55,28 @@ def get_recommendations(user_id):
     limit = int(request.args.get("limit", 10))
     recommended_post_ids = recommend_posts(user_id, limit)
     return jsonify({"postIds": recommended_post_ids})
+
+
+@app.route("/", methods=["GET"])
+def home():
+    html_content = """
+    <html>
+        <head>
+            <title>Recommendation Server</title>
+            <style>
+                body { font-family: Arial, sans-serif; text-align: center; margin-top: 50px; }
+                h1 { color: #333; }
+                p { font-size: 18px; }
+            </style>
+        </head>
+        <body>
+            <h1>Welcome to the Recommendation Server</h1>
+            <p>This server is running and ready to provide post recommendations.</p>
+            <p>Use the endpoint: <code>/recommend/&lt;user_id&gt;?limit=&lt;number&gt;</code></p>
+        </body>
+    </html>
+    """
+    return render_template_string(html_content)
 
 
 if __name__ == "__main__":
