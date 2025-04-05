@@ -8,18 +8,17 @@ import json
 import logging
 from datetime import datetime
 
+# Cấu hình logging
 logging.basicConfig(
     level=logging.INFO,
     format='%(asctime)s - %(levelname)s - %(message)s',
-    handlers=[
-        logging.StreamHandler()
-    ]
+    handlers=[logging.StreamHandler()]
 )
 logger = logging.getLogger(__name__)
 
 app = Flask(__name__)
 
-# Kết nối Firebase từ biến môi trường
+# Kết nối Firebase
 try:
     cred = credentials.Certificate(json.loads(os.getenv("FIREBASE_CREDENTIALS")))
     firebase_admin.initialize_app(cred)
@@ -64,18 +63,31 @@ def recommend_posts(user_id, limit=10):
     try:
         viewed_posts, liked_posts = get_user_interactions(user_id)
         all_posts = db.collection("posts").get()
-        post_ids = [post.id for post in all_posts]
-        post_features = [get_post_features(post.id) for post in all_posts]
 
-        logger.info(f"Total posts available: {len(post_ids)}")
+        # Lọc bài viết không thuộc về user_id
+        post_ids = []
+        post_features = []
+        for post in all_posts:
+            post_data = post.to_dict()
+            if post_data.get("postOwnerID") != user_id:  # Loại bỏ bài viết của chính người dùng
+                post_ids.append(post.id)
+                post_features.append(get_post_features(post.id))
+
+        logger.info(f"Total posts available after filtering: {len(post_ids)}")
 
         if not viewed_posts and not liked_posts:
             logger.info(f"No interactions for user {user_id}, returning recent posts")
-            recent_posts = db.collection("posts").order_by("timestamp", direction="DESCENDING").limit(limit).get()
+            recent_posts = db.collection("posts") \
+                .where("postOwnerID", "!=", user_id) \
+                .order_by("timestamp", direction="DESCENDING") \
+                .limit(limit).get()
             return [post.id for post in recent_posts]
 
-        # Điều chỉnh n_neighbors dựa trên số bài viết
-        n_neighbors = min(limit, len(post_features)) if post_features else 1
+        if not post_features:  # Nếu không còn bài viết nào sau khi lọc
+            logger.info(f"No posts available for recommendation after filtering for user {user_id}")
+            return []
+
+        n_neighbors = min(limit, len(post_features))
         logger.info(f"Using n_neighbors={n_neighbors} for KNN")
 
         nbrs = NearestNeighbors(n_neighbors=n_neighbors, algorithm="auto").fit(post_features)
@@ -98,7 +110,7 @@ def home():
         <head><title>Recommendation Server</title></head>
         <body>
             <h1>Recommendation Server</h1>
-            <p>Server is running. Use /recommend/&lt;user_id&gt; to get recommendations.</p>
+            <p>Server is running. Use /recommend/<user_id> to get recommendations.</p>
         </body>
     </html>
     """)
