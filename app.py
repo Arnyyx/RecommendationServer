@@ -8,7 +8,6 @@ import json
 import logging
 from datetime import datetime
 
-# Cấu hình logging
 logging.basicConfig(
     level=logging.INFO,
     format='%(asctime)s - %(levelname)s - %(message)s',
@@ -18,7 +17,6 @@ logger = logging.getLogger(__name__)
 
 app = Flask(__name__)
 
-# Kết nối Firebase
 try:
     cred = credentials.Certificate(json.loads(os.getenv("FIREBASE_CREDENTIALS")))
     firebase_admin.initialize_app(cred)
@@ -29,13 +27,22 @@ except Exception as e:
     raise
 
 
-# Lấy dữ liệu tương tác người dùng
 def get_user_interactions(user_id):
     try:
-        user_ref = db.collection("users").document(user_id)
-        user_data = user_ref.get().to_dict() or {}
-        viewed_posts = user_data.get("viewedPosts", [])
-        liked_posts = user_data.get("likedPosts", [])
+        activity_ref = db.collection("userActivity").where("userId", "==", user_id)
+        activities = activity_ref.get()
+
+        viewed_posts = []
+        liked_posts = []
+        for activity in activities:
+            activity_data = activity.to_dict()
+            post_id = activity_data.get("postId")
+            activity_type = activity_data.get("type")
+            if activity_type == "view" and post_id not in viewed_posts:
+                viewed_posts.append(post_id)
+            elif activity_type == "like" and post_id not in liked_posts:
+                liked_posts.append(post_id)
+
         logger.info(f"User {user_id} interactions: viewed={len(viewed_posts)}, liked={len(liked_posts)}")
         return viewed_posts, liked_posts
     except Exception as e:
@@ -43,7 +50,6 @@ def get_user_interactions(user_id):
         return [], []
 
 
-# Tạo vector đặc trưng từ keywords
 def get_post_features(post_id):
     try:
         post_ref = db.collection("posts").document(post_id)
@@ -58,18 +64,16 @@ def get_post_features(post_id):
         return [0] * len(all_keywords)
 
 
-# Đề xuất bài viết bằng KNN
 def recommend_posts(user_id, limit=10):
     try:
         viewed_posts, liked_posts = get_user_interactions(user_id)
         all_posts = db.collection("posts").get()
 
-        # Lọc bài viết không thuộc về user_id
         post_ids = []
         post_features = []
         for post in all_posts:
             post_data = post.to_dict()
-            if post_data.get("postOwnerID") != user_id:  # Loại bỏ bài viết của chính người dùng
+            if post_data.get("postOwnerID") != user_id:
                 post_ids.append(post.id)
                 post_features.append(get_post_features(post.id))
 
@@ -83,7 +87,7 @@ def recommend_posts(user_id, limit=10):
                 .limit(limit).get()
             return [post.id for post in recent_posts]
 
-        if not post_features:  # Nếu không còn bài viết nào sau khi lọc
+        if not post_features:
             logger.info(f"No posts available for recommendation after filtering for user {user_id}")
             return []
 
@@ -102,7 +106,6 @@ def recommend_posts(user_id, limit=10):
         return []
 
 
-# Trang chủ
 @app.route("/", methods=["GET"])
 def home():
     return render_template_string("""
@@ -116,7 +119,6 @@ def home():
     """)
 
 
-# Kiểm tra trạng thái
 @app.route("/status", methods=["GET"])
 def status():
     try:
@@ -128,7 +130,6 @@ def status():
         return jsonify({"status": "error", "message": str(e), "firebase_connected": False})
 
 
-# API endpoint
 @app.route("/recommend/<user_id>", methods=["GET"])
 def get_recommendations(user_id):
     try:

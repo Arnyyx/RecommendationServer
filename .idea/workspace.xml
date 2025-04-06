@@ -4,8 +4,9 @@
     <option name="autoReloadType" value="SELECTIVE" />
   </component>
   <component name="ChangeListManager">
-    <list default="true" id="fe7777fc-5b16-495d-bef7-f66e449668ca" name="Changes" comment="Fix KNN error and add logging">
+    <list default="true" id="fe7777fc-5b16-495d-bef7-f66e449668ca" name="Changes" comment="Filter out user's own posts in recommendations">
       <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/app.py" beforeDir="false" afterPath="$PROJECT_DIR$/app.py" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
@@ -103,7 +104,15 @@
       <option name="project" value="LOCAL" />
       <updated>1743824718521</updated>
     </task>
-    <option name="localTasksCounter" value="5" />
+    <task id="LOCAL-00005" summary="Filter out user's own posts in recommendations">
+      <option name="closed" value="true" />
+      <created>1743830967511</created>
+      <option name="number" value="00005" />
+      <option name="presentableId" value="LOCAL-00005" />
+      <option name="project" value="LOCAL" />
+      <updated>1743830967511</updated>
+    </task>
+    <option name="localTasksCounter" value="6" />
     <servers />
   </component>
   <component name="Vcs.Log.Tabs.Properties">
@@ -122,6 +131,7 @@
     <MESSAGE value="Add gunicorn to requirements.txt" />
     <MESSAGE value="Add homepage" />
     <MESSAGE value="Fix KNN error and add logging" />
-    <option name="LAST_COMMIT_MESSAGE" value="Fix KNN error and add logging" />
+    <MESSAGE value="Filter out user's own posts in recommendations" />
+    <option name="LAST_COMMIT_MESSAGE" value="Filter out user's own posts in recommendations" />
   </component>
 </project>
