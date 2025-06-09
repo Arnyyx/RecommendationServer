@@ -7,6 +7,9 @@ import os
 import json
 import logging
 from datetime import datetime
+from dotenv import load_dotenv
+
+load_dotenv()
 
 logging.basicConfig(
     level=logging.INFO,
@@ -18,7 +21,10 @@ logger = logging.getLogger(__name__)
 app = Flask(__name__)
 
 try:
-    cred = credentials.Certificate(json.loads(os.getenv("FIREBASE_CREDENTIALS")))
+    firebase_credentials = os.getenv("FIREBASE_CREDENTIALS")
+    if not firebase_credentials:
+        raise ValueError("FIREBASE_CREDENTIALS not found in .env file")
+    cred = credentials.Certificate(json.loads(firebase_credentials))
     firebase_admin.initialize_app(cred)
     db = firestore.client()
     logger.info("Firebase initialized successfully")
