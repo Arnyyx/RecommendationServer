@@ -147,10 +147,9 @@ def get_recommendations(user_id):
                 user_ids.add(post_data.get("postOwnerID"))
                 posts.append(post_data)
 
-        users = []
+        users = {}
         if user_ids:
-            user_docs = db.collection("users").where(firestore.firestore.DocumentReference.id, "in",
-                                                     list(user_ids)).get()
+            user_docs = db.collection("users").where("__name__", "in", list(user_ids)).get()
             users = {doc.id: doc.to_dict() for doc in user_docs}
 
         for post in posts:
