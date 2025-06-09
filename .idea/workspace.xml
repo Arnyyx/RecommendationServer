@@ -4,10 +4,8 @@
     <option name="autoReloadType" value="SELECTIVE" />
   </component>
   <component name="ChangeListManager">
-    <list default="true" id="fe7777fc-5b16-495d-bef7-f66e449668ca" name="Changes" comment="fix: Expected type 'str | None,' got 'property' instead">
+    <list default="true" id="fe7777fc-5b16-495d-bef7-f66e449668ca" name="Changes" comment="feat: .env file">
       <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/app.py" beforeDir="false" afterPath="$PROJECT_DIR$/app.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/requirements.txt" beforeDir="false" afterPath="$PROJECT_DIR$/requirements.txt" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
@@ -170,7 +168,15 @@
       <option name="project" value="LOCAL" />
       <updated>1749435432614</updated>
     </task>
-    <option name="localTasksCounter" value="9" />
+    <task id="LOCAL-00009" summary="feat: .env file">
+      <option name="closed" value="true" />
+      <created>1749439641359</created>
+      <option name="number" value="00009" />
+      <option name="presentableId" value="LOCAL-00009" />
+      <option name="project" value="LOCAL" />
+      <updated>1749439641359</updated>
+    </task>
+    <option name="localTasksCounter" value="10" />
     <servers />
   </component>
   <component name="UnknownFeatures">
@@ -213,6 +219,7 @@
     <MESSAGE value="Change userActivity collection" />
     <MESSAGE value="return post collection" />
     <MESSAGE value="fix: Expected type 'str | None,' got 'property' instead" />
-    <option name="LAST_COMMIT_MESSAGE" value="fix: Expected type 'str | None,' got 'property' instead" />
+    <MESSAGE value="feat: .env file" />
+    <option name="LAST_COMMIT_MESSAGE" value="feat: .env file" />
   </component>
 </project>

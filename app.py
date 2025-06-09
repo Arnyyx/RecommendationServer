@@ -150,6 +150,12 @@ def get_recommendations(user_id):
             post_data = post_ref.get().to_dict() or {}
             if post_data:
                 post_data["postID"] = post_id
+                if "timestamp" in post_data and isinstance(post_data["timestamp"], datetime):
+                    timestamp = post_data["timestamp"]
+                    post_data["timestamp"] = {
+                        "_seconds": int(timestamp.timestamp()),
+                        "_nanoseconds": timestamp.microsecond * 1000
+                    }
                 user_ids.add(post_data.get("postOwnerID"))
                 posts.append(post_data)
 
