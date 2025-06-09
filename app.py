@@ -136,8 +136,28 @@ def get_recommendations(user_id):
         limit = int(request.args.get("limit", 10))
         logger.info(f"Received request for user {user_id} with limit={limit}")
         recommended_post_ids = recommend_posts(user_id, limit)
-        response = jsonify({"postIds": recommended_post_ids})
-        logger.info(f"Returning {len(recommended_post_ids)} recommendations for user {user_id}")
+
+        posts = []
+        user_ids = set()
+        for post_id in recommended_post_ids:
+            post_ref = db.collection("posts").document(post_id)
+            post_data = post_ref.get().to_dict() or {}
+            if post_data:
+                post_data["postID"] = post_id
+                user_ids.add(post_data.get("postOwnerID"))
+                posts.append(post_data)
+
+        users = []
+        if user_ids:
+            user_docs = db.collection("users").where(firestore.firestore.DocumentReference.id, "in",
+                                                     list(user_ids)).get()
+            users = {doc.id: doc.to_dict() for doc in user_docs}
+
+        for post in posts:
+            post["postOwner"] = users.get(post.get("postOwnerID"), {})
+
+        response = jsonify({"posts": posts})
+        logger.info(f"Returning {len(posts)} recommendations for user {user_id}")
         return response
     except Exception as e:
         logger.error(f"Error in get_recommendations for user {user_id}: {str(e)}")
