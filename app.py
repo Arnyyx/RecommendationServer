@@ -1,3 +1,4 @@
+import gc
 from flask import Flask, request, jsonify, render_template_string
 from firebase_admin import credentials, firestore, initialize_app
 from sentence_transformers import SentenceTransformer
@@ -45,18 +46,9 @@ def get_user_interactions(user_id):
             total_score += score
             max_score = max(max_score, score)
             min_score = min(min_score, score)
-
-        avg_score = total_score / len(result) if result else 0
-        logger.info(
-            f"User {user_id} interactions - Total: {len(result)}, Avg score: {avg_score:.3f}, Max: {max_score:.3f}, Min: {min_score:.3f}")
-
-        # Log top 5 interactions
-        top_interactions = sorted(result.items(), key=lambda x: x[1], reverse=True)[:5]
-        logger.info(f"Top interactions for {user_id}: {top_interactions}")
-
         return result
-    except Exception as e:
-        logger.error(f"Error fetching interactions for {user_id}: {str(e)}")
+    except Exception as e1:
+        logger.error(f"Error fetching interactions for {user_id}: {str(e1)}")
         return {}
 
 
@@ -68,20 +60,16 @@ def get_post_embedding(post_id):
         keywords = " ".join(post_data.get("keywords", []))
         combined_text = caption + " " + keywords
 
-        logger.debug(f"Post {post_id} - Caption length: {len(caption)}, Keywords: {len(post_data.get('keywords', []))}")
-
         return model.encode(combined_text)
-    except Exception as e:
-        logger.error(f"Error fetching embedding for {post_id}: {str(e)}")
+    except Exception as e2:
+        logger.error(f"Error fetching embedding for {post_id}: {str(e2)}")
         return np.zeros(384)  # Kích thước embedding của all-MiniLM-L6-v2
 
 
 def analyze_user_profile(user_id, interactions):
-    """Phân tích profile người dùng dựa trên interactions"""
     if not interactions:
         return None
 
-    # Lấy thông tin về các bài post đã tương tác
     interacted_posts = []
     for post_id, score in interactions.items():
         try:
@@ -94,8 +82,8 @@ def analyze_user_profile(user_id, interactions):
                     'caption': post_data.get('caption', ''),
                     'owner': post_data.get('postOwnerID', '')
                 })
-        except Exception as e:
-            logger.warning(f"Could not fetch post data for {post_id}: {str(e)}")
+        except Exception as e1:
+            logger.warning(f"Could not fetch post data for {post_id}: {str(e1)}")
 
     # Phân tích keywords phổ biến
     keyword_scores = {}
@@ -149,29 +137,27 @@ def calculate_detailed_similarity(user_embedding, post_embedding, post_id, user_
             'caption_length': len(post_caption)
         }
 
-    except Exception as e:
-        logger.warning(f"Could not get detailed scoring for post {post_id}: {str(e)}")
+    except Exception as e1:
+        logger.warning(f"Could not get detailed scoring for post {post_id}: {str(e1)}")
         return base_similarity, {'base_similarity': base_similarity, 'final_score': base_similarity}
 
 
 def recommend_posts(user_id, limit=10):
     try:
         logger.info(f"Starting recommendation for user {user_id}")
-
         interactions = get_user_interactions(user_id)
         user_profile = analyze_user_profile(user_id, interactions)
 
-        all_posts = db.collection("posts").get()
+        # Phân trang Firestore
+        all_posts = (db.collection("posts")
+                     .select(["caption", "keywords", "postOwnerID"])
+                     .where("postOwnerID", "!=", user_id).limit(500).get())
         post_ids = []
         post_embeddings = []
 
         for post in all_posts:
-            post_data = post.to_dict()
-            if post_data.get("postOwnerID") != user_id:
-                post_ids.append(post.id)
-                post_embeddings.append(get_post_embedding(post.id))
-
-        logger.info(f"Found {len(post_ids)} candidate posts for user {user_id}")
+            post_ids.append(post.id)
+            post_embeddings.append(get_post_embedding(post.id))
 
         if not interactions:
             logger.info(f"No interactions for user {user_id}, returning recent posts")
@@ -185,55 +171,38 @@ def recommend_posts(user_id, limit=10):
             logger.info(f"No posts available for recommendation for user {user_id}")
             return []
 
-        # Tạo user embedding từ các bài đã tương tác
         interacted_embeddings = []
         interaction_weights = []
-
-        for post_id, score in interactions.items():
+        for post_id, score in list(interactions.items())[:100]:
             embedding = get_post_embedding(post_id)
             interacted_embeddings.append(embedding)
             interaction_weights.append(score)
 
-        # Weighted average của user embedding
         user_embedding = np.average(interacted_embeddings, axis=0, weights=interaction_weights)
-        logger.info(f"Created user embedding from {len(interacted_embeddings)} interactions")
 
-        # Tính similarity chi tiết cho từng post
+        batch_size = 100
         recommendations = []
-        detailed_scores = []
+        for i in range(0, len(post_ids), batch_size):
+            batch_posts = post_ids[i:i + batch_size]
+            batch_embeddings = post_embeddings[i:i + batch_size]
+            for idx, post_id in enumerate(batch_posts):
+                score, details = calculate_detailed_similarity(
+                    user_embedding, batch_embeddings[idx], post_id, user_profile
+                )
+                recommendations.append({
+                    "postId": post_id,
+                    "score": float(score),
+                    "reason": "Similar to your interests"
+                })
+            gc.collect()
 
-        for idx, post_id in enumerate(post_ids):
-            final_score, score_details = calculate_detailed_similarity(
-                user_embedding, post_embeddings[idx], post_id, user_profile
-            )
-
-            recommendations.append({
-                "postId": post_id,
-                "score": float(final_score),
-                "reason": "Similar to your interests"
-            })
-
-            detailed_scores.append({
-                'post_id': post_id,
-                **score_details
-            })
-
-        # Sắp xếp và lấy top recommendations
         recommendations = sorted(recommendations, key=lambda x: x['score'], reverse=True)[:limit]
-        top_detailed_scores = sorted(detailed_scores, key=lambda x: x['final_score'], reverse=True)[:limit]
-
-        # Log chi tiết về top recommendations
-        logger.info(f"Top {len(recommendations)} recommendations for user {user_id}:")
-        for i, (rec, details) in enumerate(zip(recommendations, top_detailed_scores)):
-            logger.info(f"  #{i + 1}: Post {rec['postId']} - Score: {rec['score']:.4f}")
-            logger.info(f"    Base similarity: {details['base_similarity']:.4f}")
-            logger.info(f"    Keyword bonus: {details.get('keyword_bonus', 0):.4f}")
-            logger.info(f"    Keywords: {details.get('post_keywords', [])}")
+        logger.info(f"Returning {len(recommendations)} recommendations for user {user_id}")
 
         return recommendations
 
-    except Exception as e:
-        logger.error(f"Error in recommend_posts for {user_id}: {str(e)}")
+    except Exception as e1:
+        logger.error(f"Error in recommend_posts for {user_id}: {str(e1)}")
         return []
 
 
@@ -257,9 +226,9 @@ def status():
         logger.info("Status check: Server and Firebase are operational")
         return jsonify(
             {"status": "running", "firebase_connected": True, "timestamp": datetime.now(timezone.utc).isoformat()})
-    except Exception as e:
-        logger.error(f"Status check failed: {str(e)}")
-        return jsonify({"status": "error", "message": str(e), "firebase_connected": False})
+    except Exception as e1:
+        logger.error(f"Status check failed: {str(e1)}")
+        return jsonify({"status": "error", "message": str(e1), "firebase_connected": False})
 
 
 @app.route("/recommend/<user_id>", methods=["GET"])
@@ -267,16 +236,6 @@ def get_recommendations(user_id):
     try:
         limit = int(request.args.get("limit", 10))
         last_post = request.args.get("last_post", None)
-        debug_mode = request.args.get("debug", "false").lower() == "true"
-
-        # Bật debug logging nếu được yêu cầu
-        if debug_mode:
-            logging.getLogger().setLevel(logging.DEBUG)
-
-        logger.info(
-            f"Received request for user {user_id} with limit={limit}, last_post={last_post}, debug={debug_mode}")
-
-        # Kiểm tra cache
         cache_ref = db.collection("recommendations").document(user_id)
         cache = cache_ref.get().to_dict()
 
@@ -292,21 +251,14 @@ def get_recommendations(user_id):
         if last_post and any(r["postId"] == last_post for r in recommendations):
             start_idx = next(i for i, r in enumerate(recommendations) if r["postId"] == last_post) + 1
             recommendations = recommendations[start_idx:start_idx + limit]
-            logger.info(f"Applied pagination: starting from index {start_idx}")
         else:
             recommendations = recommendations[:limit]
 
-        logger.info(f"Returning {len(recommendations)} recommendations for user {user_id}")
-
-        # Reset log level
-        if debug_mode:
-            logging.getLogger().setLevel(logging.INFO)
-
         return jsonify({"posts": recommendations})
 
-    except Exception as e:
-        logger.error(f"Error in get_recommendations for user {user_id}: {str(e)}")
-        return jsonify({"error": str(e)}), 500
+    except Exception as e1:
+        logger.error(f"Error in get_recommendations for user {user_id}: {str(e1)}")
+        return jsonify({"error": str(e1)}), 500
 
 
 @app.route("/user-profile/<user_id>", methods=["GET"])
@@ -321,9 +273,9 @@ def get_user_profile(user_id):
             "profile": profile,
             "total_interactions": len(interactions)
         })
-    except Exception as e:
-        logger.error(f"Error getting profile for user {user_id}: {str(e)}")
-        return jsonify({"error": str(e)}), 500
+    except Exception as e1:
+        logger.error(f"Error getting profile for user {user_id}: {str(e1)}")
+        return jsonify({"error": str(e1)}), 500
 
 
 if __name__ == "__main__":
