@@ -104,10 +104,9 @@ def analyze_user_profile(user_id, interactions):
 
 
 def calculate_detailed_similarity(user_embedding, post_embedding, post_id, user_profile):
-    """Tính toán similarity chi tiết và log các yếu tố ảnh hưởng"""
+    """Tính toán similarity chi tiết và tạo lý do ngắn gọn cho UI"""
     base_similarity = cosine_similarity([user_embedding], [post_embedding])[0][0]
 
-    # Lấy thông tin bài post để phân tích
     try:
         post_data = db.collection("posts").document(post_id).get().to_dict()
         post_keywords = post_data.get('keywords', [])
@@ -115,12 +114,21 @@ def calculate_detailed_similarity(user_embedding, post_embedding, post_id, user_
 
         # Tính keyword overlap bonus
         keyword_bonus = 0
+        overlap_keywords = []
         if user_profile and user_profile['top_keywords']:
             user_top_keywords = [kw[0] for kw in user_profile['top_keywords'][:5]]
-            overlap_keywords = set(post_keywords) & set(user_top_keywords)
+            overlap_keywords = list(set(post_keywords) & set(user_top_keywords))
             keyword_bonus = len(overlap_keywords) * 0.1
 
         final_score = base_similarity + keyword_bonus
+
+        reason = "Matches your interests"
+        if overlap_keywords:
+            reason = f"Relates to {', '.join(overlap_keywords[:2])}"
+        elif base_similarity > 0.7:
+            reason = "Similar to posts you like"
+        elif len(post_caption) > 100:
+            reason = "Has detailed content you enjoy"
 
         logger.debug(f"Post {post_id} scoring breakdown:")
         logger.debug(f"  - Base similarity: {base_similarity:.4f}")
@@ -128,18 +136,24 @@ def calculate_detailed_similarity(user_embedding, post_embedding, post_id, user_
         logger.debug(f"  - Final score: {final_score:.4f}")
         logger.debug(f"  - Post keywords: {post_keywords}")
         logger.debug(f"  - Caption length: {len(post_caption)}")
+        logger.debug(f"  - Reason: {reason}")
 
         return final_score, {
             'base_similarity': base_similarity,
             'keyword_bonus': keyword_bonus,
             'final_score': final_score,
             'post_keywords': post_keywords,
-            'caption_length': len(post_caption)
+            'caption_length': len(post_caption),
+            'reason': reason
         }
 
-    except Exception as e1:
-        logger.warning(f"Could not get detailed scoring for post {post_id}: {str(e1)}")
-        return base_similarity, {'base_similarity': base_similarity, 'final_score': base_similarity}
+    except Exception as e:
+        logger.warning(f"Could not get detailed scoring for post {post_id}: {str(e)}")
+        return base_similarity, {
+            'base_similarity': base_similarity,
+            'final_score': base_similarity,
+            'reason': "Matches your interests"
+        }
 
 
 def recommend_posts(user_id, limit=10):
@@ -165,7 +179,8 @@ def recommend_posts(user_id, limit=10):
                 .where("postOwnerID", "!=", user_id) \
                 .order_by("timestamp", direction="DESCENDING") \
                 .limit(limit).get()
-            return [{"postId": p.id, "score": 1.0, "reason": "Recent post"} for p in recent_posts]
+            return [{"postId": p.id, "score": 1.0, "reason": "No interaction data"} for p in
+                    recent_posts]
 
         if not post_embeddings:
             logger.info(f"No posts available for recommendation for user {user_id}")
@@ -192,7 +207,7 @@ def recommend_posts(user_id, limit=10):
                 recommendations.append({
                     "postId": post_id,
                     "score": float(score),
-                    "reason": "Similar to your interests"
+                    "reason": details['reason']
                 })
             gc.collect()
 
@@ -201,8 +216,8 @@ def recommend_posts(user_id, limit=10):
 
         return recommendations
 
-    except Exception as e1:
-        logger.error(f"Error in recommend_posts for {user_id}: {str(e1)}")
+    except Exception as e:
+        logger.error(f"Error in recommend_posts for {user_id}: {str(e)}")
         return []
 
 
